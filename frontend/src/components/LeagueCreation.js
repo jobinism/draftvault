@@ -9,16 +9,17 @@ const LeagueCreation = () => {
 
   const handleCreate = async () => {
     try {
-      const response = await axios.post('http://localhost:3000/leagues/create', {
+      const response = await axios.post('/leagues/create', {
         name,
         maxPlayers: size,
         settings: {},
-        userId: 1, // Mock user ID
+        userId: 1, // TODO: Replace with authenticated user ID from JWT or context
         currency
       });
       alert(`League created! Fee: $${fee}`);
     } catch (error) {
-      alert('Failed to create league');
+      console.error('Failed to create league:', error.response?.data || error.message);
+      alert(`Failed to create league: ${error.response?.data?.error || error.message}`);
     }
   };
 
