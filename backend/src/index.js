@@ -199,6 +199,61 @@ app.post('/teams/draft', async (req, res) => {
   }
 });
 
+// Scores Update Route
+app.post('/scores/update', async (req, res) => {
+  const { teamId, week } = req.body;
+  if (!teamId || !week) {
+    return res.status(400).json({ error: 'Missing required fields: teamId, week' });
+  }
+
+  try {
+    // Fetch team and roster
+    const team = await pool.query('SELECT roster, league_id FROM teams WHERE id = $1', [teamId]);
+    if (team.rows.length === 0) {
+      return res.status(404).json({ error: `Team with ID ${teamId} does not exist` });
+    }
+
+    // Fetch league settings
+    const league = await pool.query('SELECT settings FROM leagues WHERE id = $1', [team.rows[0].league_id]);
+    if (league.rows.length === 0) {
+      return res.status(404).json({ error: `League with ID ${team.rows[0].league_id} does not exist` });
+    }
+
+    const settings = league.rows[0].settings;
+    let points = 0;
+
+    // Calculate points for each player in the roster
+    for (const player of team.rows[0].roster) {
+      // Mock stats; replace with API-Sports call (e.g., /players/statistics)
+      const stats = {
+        passYards: 300,
+        passTD: 2,
+        rushYards: 100,
+        rushTD: 1,
+        recYards: 50,
+        recTD: 0
+      };
+      points += (stats.passYards * (settings.passYards || 0.04)) +
+                (stats.passTD * (settings.passTD || 6)) +
+                (stats.rushYards * (settings.rushYards || 0.1)) +
+                (stats.rushTD * (settings.rushTD || 6)) +
+                (stats.recYards * (settings.recYards || 0.1)) +
+                (stats.recTD * (settings.recTD || 6));
+    }
+
+    // Store score in database
+    const result = await pool.query(
+      'INSERT INTO scores (team_id, week, points) VALUES ($1, $2, $3) RETURNING *',
+      [teamId, week, points]
+    );
+
+    res.status(200).json({ points: result.rows[0].points });
+  } catch (error) {
+    console.error('Failed to update scores:', error.message, error.stack);
+    res.status(500).json({ error: `Database error: ${error.message}` });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

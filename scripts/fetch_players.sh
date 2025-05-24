@@ -2,7 +2,7 @@
 
 # API credentials and parameters
 API_KEY="08d28d14ccb5483eeaf6d28243fa6879"  # Replace with your actual API key
-SEASON="2023"
+SEASON="2024"
 LEAGUE="1"
 BASE_URL="https://v1.american-football.api-sports.io"
 
