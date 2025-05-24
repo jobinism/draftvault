@@ -8,12 +8,18 @@ const LeagueCreation = () => {
   const fee = size === 10 ? 10 : 15;
 
   const handleCreate = async () => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      alert('Please log in to create a league');
+      return;
+    }
+
     try {
       const response = await axios.post('/leagues/create', {
         name,
         maxPlayers: size,
         settings: {},
-        userId: 1, // TODO: Replace with authenticated user ID from JWT or context
+        userId: parseInt(userId),
         currency
       });
       alert(`League created! Fee: $${fee}`);

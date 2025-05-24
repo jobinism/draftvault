@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -31,22 +33,18 @@ app.get('/', (req, res) => {
 
 // API-Sports Players
 app.get('/players', async (req, res) => {
-  const season = req.query.season || '2024';
+  const season = req.query.season || '2023';
   const cacheKey = `players-${season}`;
   const cached = cache.get(cacheKey);
   if (cached) return res.json(cached);
 
   try {
-    const response = await axios.get(
-      `https://v1.american-football.api-sports.io/players?season=${season}`,
-      { headers: { 'x-apisports-key': process.env.API_SPORTS_KEY } }
-    );
-    const players = response.data.response;
-    cache.set(cacheKey, players);
-    res.json(players);
+    const playersData = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', `players_${season}.json`)));
+    cache.set(cacheKey, playersData);
+    res.json(playersData);
   } catch (error) {
-    console.error('Failed to fetch players:', error.message);
-    res.status(500).json({ error: 'Failed to fetch players' });
+    console.error('Failed to load players:', error.message);
+    res.status(500).json({ error: 'Failed to load players' });
   }
 });
 
@@ -127,7 +125,6 @@ app.post('/leagues/create', async (req, res) => {
     return res.status(400).json({ error: 'Invalid currency' });
   }
 
-  // Verify user exists
   try {
     const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (userCheck.rows.length === 0) {
@@ -153,6 +150,51 @@ app.post('/leagues/create', async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Failed to create league:', error.message);
+    res.status(500).json({ error: `Database error: ${error.message}` });
+  }
+});
+
+// Draft Route
+app.post('/teams/draft', async (req, res) => {
+  const { teamId, playerId } = req.body;
+  if (!teamId || !playerId) {
+    return res.status(400).json({ error: 'Missing required fields: teamId, playerId' });
+  }
+
+  try {
+    // Check if team exists
+    const teamCheck = await pool.query('SELECT roster FROM teams WHERE id = $1', [teamId]);
+    if (teamCheck.rows.length === 0) {
+      return res.status(404).json({ error: `Team with ID ${teamId} does not exist` });
+    }
+
+    // Ensure roster is an array
+    let currentRoster = teamCheck.rows[0].roster || [];
+    if (!Array.isArray(currentRoster)) {
+      console.error('Invalid roster format:', currentRoster);
+      currentRoster = [];
+    }
+
+    // Check if player is already drafted
+    if (currentRoster.some(p => p.playerId === playerId)) {
+      return res.status(400).json({ error: `Player ${playerId} already drafted` });
+    }
+
+    // Add new player to roster
+    currentRoster.push({ playerId: parseInt(playerId), draftedAt: new Date().toISOString() });
+
+    // Debug: Log the roster before update
+    console.log('Updating roster with:', JSON.stringify(currentRoster));
+
+    // Update the roster in the database
+    const result = await pool.query(
+      'UPDATE teams SET roster = $1::jsonb WHERE id = $2 RETURNING *',
+      [JSON.stringify(currentRoster), teamId]
+    );
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error('Failed to draft player:', error.message, error.stack);
     res.status(500).json({ error: `Database error: ${error.message}` });
   }
 });
